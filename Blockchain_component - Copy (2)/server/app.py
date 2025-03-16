@@ -61,6 +61,7 @@ CONTRACT_ABI = json.loads("""
 contract = web3.eth.contract(address=CONTRACT_ADDRESS, abi=CONTRACT_ABI)
 
 def zip_file(file, file_name):
+    """Compress file into a ZIP format before storing."""
     zip_buffer = BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
         zipf.writestr(file_name, file.read())
@@ -68,6 +69,7 @@ def zip_file(file, file_name):
     return base64.b64encode(zip_buffer.getvalue()).decode("utf-8")
 
 def decode_zip(base64_data, file_name):
+    """Decode ZIP file from blockchain and extract original Excel file."""
     zip_buffer = BytesIO(base64.b64decode(base64_data))
     with zipfile.ZipFile(zip_buffer, "r") as zipf:
         extracted_file = zipf.open(file_name)
@@ -81,7 +83,10 @@ def store():
 
         file = request.files["file"]
         file_name = file.filename
+        print(f"📤 Storing file: {file_name}")
+
         encoded_zip = zip_file(file, file_name)
+        print(f"✅ File zipped and stored on blockchain: {len(encoded_zip)} characters long")
 
         tx_hash = contract.functions.storeZipFile(file_name, encoded_zip).transact({
             "from": SENDER_ACCOUNT,
@@ -97,11 +102,10 @@ def store():
 def list_files():
     try:
         file_names, timestamps = contract.functions.getFileNames().call()
-        print(f"✅ Retrieved from Blockchain: {file_names}")  # Debugging log
+        print(f"✅ Retrieved from Blockchain: {file_names}")  
         file_list = [{"id": i + 1, "file_name": file_names[i], "timestamp": timestamps[i]} for i in range(len(file_names))]
         return jsonify({"files": file_list}), 200
     except Exception as e:
-        print(f"❌ ERROR: {e}")  
         return jsonify({"error": str(e)}), 500
 
 @app.route("/retrieve/<int:file_id>", methods=["GET"])
@@ -113,7 +117,11 @@ def retrieve(file_id):
         if file_id > len(file_names) or file_id <= 0:
             return jsonify({"error": "Invalid file ID"}), 400
 
+        print(f"📥 Retrieving ZIP file from blockchain: {len(encoded_zip)} characters long")
+        
         excel_file = decode_zip(encoded_zip, file_names[file_id - 1])
+        print(f"✅ Unzipped file ready for download: {file_names[file_id - 1]}")
+
         return send_file(excel_file, download_name=file_names[file_id - 1], as_attachment=True)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
